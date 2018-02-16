@@ -32,7 +32,7 @@ contract CUZCrowdsaleTokenVesting is Ownable {
 
   struct Vesting {
     address beneficiary;
-    uint256 weiAmount; // TODO: Why wei and not CUZ?
+    uint256 weiAmount;
     uint256 endTime;
   }
 
@@ -46,6 +46,10 @@ contract CUZCrowdsaleTokenVesting is Ownable {
   }
 
   function addVesting(address beneficiary, uint256 weiAmount, uint256 endTime) public onlyOwner {
+    // this function is called when transferring eth into the crowdsale contract (that is, investing in our ICO).
+    // as such, this fuction needs to be as slim, gas-wise, as possible.
+    // that's why we shouldn't do more advanced things here, such as testing for the presence of a previous `Vesting`
+    // object for the same `beneficiary` and `endTime`, instead of always push a new object into the array
     vestings.push(Vesting(beneficiary, weiAmount, endTime));
   }
 
@@ -59,7 +63,11 @@ contract CUZCrowdsaleTokenVesting is Ownable {
     }
   }
 
-  // TODO: Elaborate on the time-memory tradeoff in this function
+  // this function is very much not optimized (it runs in O(n^2) where n is the number of `Vesting` objects).
+  // the tradeoff in this function is so that the `addVesting` function can be much simpler, and cost less gas to the
+  // interested ICO invester.
+  // this function we can call ourselves, and pay the premium on the gas needed for the extra computation, rather than
+  // our contributors having to pay any extra.
   function transferReleasedVestedFunds() public { 
     for (uint i = 0; i < vestings.length; i++) {
       Vesting storage outerVesting = vestings[i];
@@ -103,6 +111,8 @@ contract CUZNormalTokenVesting is Ownable {
 
   function setToken(ERC20Basic token_) public onlyOwner {
     require(token == address(0));
+    require(token_ == address(0));
+
     token = token_;
   }
 
@@ -221,7 +231,7 @@ contract CUZFutureDevelopmentWallet is Ownable {
 
     // calculate the amount released.
     // after first 24 months -> 50%
-    // every month until 2 years have passed -> (50/12)%, a twelveth of half of the total amount
+    // every month until 2 years have passed -> a 48th of the total amount
     uint256 monthsPassed = now.sub(vestingStartTime).div((365 * 4 + 1) / 12 * 100).div(100) % 1;
     uint256 amountToReleaseInWei = monthsPassed.mul(72000000 / 48 * 10 ** 18).sub(releasedAmountInWei);
 
@@ -279,13 +289,15 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   function buyTokens(address beneficiary) public payable {
     super.buyTokens(beneficiary);
 
+    // we need to keep a list of contributors and their contributed amount in the case where we don't finish the crowdsale cap and 
+    // have to distribute the remaining tokens to all participants
     if (contributionsInWei[beneficiary] == 0) {
       contributors.push(beneficiary);
     }
 
     contributionsInWei[beneficiary] = contributionsInWei[beneficiary].add(msg.value);
 
-    // during the private sale, the wallet owner (verified in `validPurchase`) does not need to be whitelisted
+    // during the private sale, the sender/wallet owner (verified that they are one and the same in `validPurchase`) does not need to be whitelisted
     if (!isPrivateSale()) {
       whitelistedAmountInWei[beneficiary].sub(msg.value);
     }
