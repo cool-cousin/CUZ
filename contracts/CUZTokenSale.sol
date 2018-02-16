@@ -111,7 +111,6 @@ contract CUZNormalTokenVesting is Ownable {
 
   function setToken(ERC20Basic token_) public onlyOwner {
     require(token == address(0));
-    require(token_ == address(0));
 
     token = token_;
   }
@@ -215,7 +214,6 @@ contract CUZFutureDevelopmentWallet is Ownable {
 
   function setToken(ERC20Basic token_) public onlyOwner {
     require(token == address(0));
-    require(token_ == address(0));
 
     token = token_;
   }
