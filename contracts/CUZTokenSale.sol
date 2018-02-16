@@ -205,21 +205,28 @@ contract CUZFutureDevelopmentWallet is Ownable {
 
   function setToken(ERC20Basic token_) public onlyOwner {
     require(token == address(0));
+    require(token_ == address(0));
+
     token = token_;
   }
 
   function release() public hasToken returns (bool) {
-    require(token.balanceOf(this).sub(releasedAmountInWei) == 72000000 * 10 ** 18);
+    require(token.balanceOf(this).sub(releasedAmountInWei) == 72000000 * 10 ** 18);  // sanity check
 
-    if (now < vestingStartTime.add(86400 * 365)) {
-      return false;
-    }
+    // cliff is 1 year, before that do nothing
+    require(now >= vestingStartTime.add(86400 * 365));
 
+    // make sure we have un-released funds left
+    require(releasedAmountInWei < 72000000 * 10 ** 18);
+
+    // calculate the amount released.
+    // after first 24 months -> 50%
+    // every month until 2 years have passed -> (50/12)%, a twelveth of half of the total amount
     uint256 monthsPassed = now.sub(vestingStartTime).div((365 * 4 + 1) / 12 * 100).div(100) % 1;
-    uint256 amountReleased = monthsPassed.mul(72000000 / 48 * 10 ** 18).sub(releasedAmountInWei);
+    uint256 amountToReleaseInWei = monthsPassed.mul(72000000 / 48 * 10 ** 18).sub(releasedAmountInWei);
 
-    if (amountReleased > 0) {
-      token.safeTransfer(owner, amountReleased);
+    if (amountToReleaseInWei > 0) {
+      token.safeTransfer(owner, amountToReleaseInWei);
       return true;
     } else {
       return false;
@@ -286,36 +293,50 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     uint256 vestingDuration;
 
     if (isPublicSale()) {
+      // public crowdsale has bonuses based on how long after crowdsale start the contributor joined
       uint256 daysSinceStart = (now - startTime).div(86400);
+
+      // starting from week 3 of crowdsale on - no bonus
       if (daysSinceStart < 14) {
         if (daysSinceStart < 1) {
+          // 20% bonus in first 24 hours
           bonusWeiAmount = getTokenAmount(msg.value).div(5);
           vestingDuration = MONTH * 3;
         } else if (daysSinceStart < 7) {
+          // 10% bonus in days 2-7
           bonusWeiAmount = getTokenAmount(msg.value).div(10);
           vestingDuration = MONTH * 3 / 2;
         } else {
+          // 5% bonus in week 2
           bonusWeiAmount = getTokenAmount(msg.value).div(20);
           vestingDuration = MONTH;
         }
       }
     } else {
+      // private sale and public pre-sale have bonuses based on contribution amount
+
       if (msg.value <= 10 * 10 ** 18) {
+        // 20% on 0.1(min)eth->10 eth
         bonusWeiAmount = getTokenAmount(msg.value).div(5);
         vestingDuration = MONTH * 3;
       } else if (msg.value <= 50 * 10 ** 18) {
+        // 25% on 10eth->50eth
         bonusWeiAmount = getTokenAmount(msg.value).div(4);
         vestingDuration = MONTH * 3;
       } else if (msg.value <= 100 * 10 ** 18) {
-        bonusWeiAmount = getTokenAmount(msg.value).div(100).mul(30);
+        // 30% on 50eth->100eth
+        bonusWeiAmount = getTokenAmount(msg.value).mul(30).div(100);
         vestingDuration = MONTH * 6;
       } else if (msg.value <= 250 * 10 ** 18) {
-        bonusWeiAmount = getTokenAmount(msg.value).div(100).mul(35);
+        // 35% on 100eth->250eth
+        bonusWeiAmount = getTokenAmount(msg.value).mul(35).div(100);
         vestingDuration = MONTH * 6;
       } else if (msg.value <= 500 * 10 ** 18) {
-        bonusWeiAmount = getTokenAmount(msg.value).div(10).mul(4);
+        // 40% on 250eth->500eth
+        bonusWeiAmount = getTokenAmount(msg.value).mul(4).div(10);
         vestingDuration = MONTH * 9;
       } else {
+        // 50% on >500eth
         bonusWeiAmount = getTokenAmount(msg.value).div(2);
         vestingDuration = MONTH * 9;
       }
@@ -339,11 +360,15 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   }
 
   function forwardFunds() internal {
+    // the original OpenZeppelin crowdsale contract forwards any funds received from contributors to a wallet address.
+    // we prefer to pro-actively call the `whithdrawFunds` function and withdraw any amount we currently want.
+    // override this function to prevent the funds from being forwarded (the eth value will stay assoicated with this contract address)
   }
 
   function withdrawFunds(uint256 weiAmount) public {
     require(msg.sender == wallet);
     require(weiAmount > 0);
+
     wallet.transfer(weiAmount);
   }
 
@@ -372,22 +397,31 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     require(now > endTime);
     require(weiRaised > 0);
 
+    // in case we the crowdsale time has ended and we have not fulfilled the cap, distribute remainining tokens between
+    // all token holders
+
     uint256 tokensLeft = CappedToken(token).cap().sub(token.totalSupply());
 
+    // 67% of the total token cap are minted for various internal CC uses,
+    // so CC deserves 67% of the tokens left at the end of a non-fulfilled crowdsale
     uint256 tokensForCompany = tokensLeft.div(100).mul(67);
     tokensLeft = tokensLeft.sub(tokensForCompany);
     token.mint(wallet, tokensForCompany);
 
-    require(tokensLeft > 0);
+    require(tokensLeft > 0);  // sanity check
 
     for (uint i = 0; i < contributors.length; i++) {
       address contributor = contributors[i];
       uint256 contributionInWei = contributionsInWei[contributor];
 
       if (contributionInWei > 0) {
+        // the percentage of this contributor's contribution from the total wei raised, is the percentage of the tokens left that he/she should
+        // be getting
         uint256 dividendInWei = tokensLeft.mul(contributionInWei).div(weiRaised);
-        require(dividendInWei > 0);
+        require(dividendInWei > 0);  // sanity check
 
+        // an address can (theoretically) appear multiple times in the `contributors` array, so make sure a second iteration over this address
+        // will not result in duplicate dividend-sending
         contributionsInWei[contributor] = contributionsInWei[contributor].sub(contributionInWei);
 
         token.mint(contributor, dividendInWei);
