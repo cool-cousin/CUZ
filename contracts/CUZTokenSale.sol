@@ -227,6 +227,7 @@ contract CUZFutureDevelopmentWallet is Ownable {
 
     if (amountToReleaseInWei > 0) {
       token.safeTransfer(owner, amountToReleaseInWei);
+      releasedAmountInWei = releasedAmountInWei.add(amountToReleaseInWei);
       return true;
     } else {
       return false;
