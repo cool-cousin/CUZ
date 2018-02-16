@@ -355,10 +355,6 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     }
   }
 
-  function getTokenAmount(uint256 weiAmount) internal view returns(uint256) {
-    return weiAmount.mul(rate);
-  }
-
   function forwardFunds() internal {
     // the original OpenZeppelin crowdsale contract forwards any funds received from contributors to a wallet address.
     // we prefer to pro-actively call the `whithdrawFunds` function and withdraw any amount we currently want.
