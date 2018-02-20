@@ -286,8 +286,114 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 + 1));
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 70687.5);
     await this.assertTokenBalance(investor2, 235625);
+  });
+
+  it('[presale] get 30% bonus on >50-100 eth', async function() {
+    const investor1 = accounts[2], investor2 = accounts[3];
+
+    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.invest(investor1, 55);
+    await this.invest(investor2, 100);
+
+    await this.assertTokenBalance(investor1, 55 * 3770);
+    await this.assertTokenBalance(investor2, 100 * 3770);
+
+    await this.assertVestedBalance(investor1, 55 * 3770 * 0.3);
+    await this.assertVestedBalance(investor2, 100 * 3770 * 0.3);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 - 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertTokenBalance(investor1, 55 * 3770);
+    await this.assertTokenBalance(investor2, 100 * 3770);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 + 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
+    await this.assertTokenBalance(investor1, 55 * 3770 * 1.3);
+    await this.assertTokenBalance(investor2, 100 * 3770 * 1.3);
+  });
+
+  it('[presale] get 35% bonus on >100-250 eth', async function() {
+    const investor1 = accounts[2], investor2 = accounts[3];
+
+    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.invest(investor1, 110);
+    await this.invest(investor2, 250);
+
+    await this.assertTokenBalance(investor1, 110 * 3770);
+    await this.assertTokenBalance(investor2, 250 * 3770);
+
+    await this.assertVestedBalance(investor1, 110 * 3770 * 0.35);
+    await this.assertVestedBalance(investor2, 250 * 3770 * 0.35);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 - 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertTokenBalance(investor1, 110 * 3770);
+    await this.assertTokenBalance(investor2, 250 * 3770);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 + 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
+    await this.assertTokenBalance(investor1, 110 * 3770 * 1.35);
+    await this.assertTokenBalance(investor2, 250 * 3770 * 1.35);
+  });
+
+  it('[presale] get 40% bonus on >250-500 eth', async function() {
+    const investor1 = accounts[2], investor2 = accounts[3];
+
+    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.invest(investor1, 255);
+    await this.invest(investor2, 500);
+
+    await this.assertTokenBalance(investor1, 255 * 3770);
+    await this.assertTokenBalance(investor2, 500 * 3770);
+
+    await this.assertVestedBalance(investor1, 255 * 3770 * 0.4);
+    await this.assertVestedBalance(investor2, 500 * 3770 * 0.4);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 - 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertTokenBalance(investor1, 255 * 3770);
+    await this.assertTokenBalance(investor2, 500 * 3770);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 + 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
+    await this.assertTokenBalance(investor1, 255 * 3770 * 1.4);
+    await this.assertTokenBalance(investor2, 500 * 3770 * 1.4);
+  });
+
+  it('[presale] get 50% bonus on >500 eth', async function() {
+    const investor1 = accounts[2], investor2 = accounts[3];
+
+    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.invest(investor1, 510);
+    await this.invest(investor2, 550);
+
+    await this.assertTokenBalance(investor1, 510 * 3770);
+    await this.assertTokenBalance(investor2, 550 * 3770);
+
+    await this.assertVestedBalance(investor1, 510 * 3770 * 0.5);
+    await this.assertVestedBalance(investor2, 550 * 3770 * 0.5);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 - 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertTokenBalance(investor1, 510 * 3770);
+    await this.assertTokenBalance(investor2, 550 * 3770);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 + 1));
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
+    await this.assertTokenBalance(investor1, 510 * 3770 * 1.5);
+    await this.assertTokenBalance(investor2, 550 * 3770 * 1.5);
   });
 
   it('buy whole supply', async function() {
