@@ -432,6 +432,22 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21));
   });
+
+  it("[private presale] only owner can invest", async function () {
+    await this.tokenSale.owner().should.eventually.be.equal(accounts[0]);
+
+    await this.invest(accounts[1], 1, {shouldFail: true});
+    await this.invest(accounts[0], 1);
+  });
+
+  it('[private presale] bonus tokens should not be vested', async function () {
+    const owner = accounts[0];
+
+    const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
+
+    await this.invest(owner, 500);
+    await this.assertTokenBalance(owner, oldBalance.add(500 * 3770 * 1.4));
+  });
 });
 
 contract('CUZToken', function(accounts) {
