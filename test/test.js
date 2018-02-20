@@ -115,7 +115,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("check cannot reserve more than given value", async function () {
     const teamMember = accounts[2];
 
-    await this.teamTokenVesting.addVesting.call(
+    await this.teamTokenVesting.addVesting.sendTransaction(
       teamMember,
       (new BigNumber(300000000)).mul(1e18)
     ).should.be.rejectedWith(EVMRevert);
@@ -124,18 +124,19 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("check cannot retrieve funds before vesting period is over", async function () {
     const beneficiary1 = accounts[2], beneficiary2 = accounts[3];
 
-    (await this.token.balanceOf.call(beneficiary1)).should.be.bignumber.equals(0);
-    (await this.token.balanceOf.call(beneficiary2)).should.be.bignumber.equals(0);
+    await this.assertTokenBalance(beneficiary1, 0);
+    await this.assertTokenBalance(beneficiary2, 0);
 
     const tokenAmountInWei = web3.toWei(0.5, 'ether');
     await this.teamTokenVesting.addVesting.sendTransaction(beneficiary1, tokenAmountInWei);
     await this.teamTokenVesting.addVesting.sendTransaction(beneficiary2, tokenAmountInWei);
 
-    await increaseTimeTo(this.endTime.add(duration.days(365 * 2 - 1)));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 2 - 1));
     
     await this.teamTokenVesting.transferReleasedVestedFunds.sendTransaction().should.be.rejectedWith(EVMRevert);
-    (await this.token.balanceOf.call(beneficiary1)).should.be.bignumber.equals(0);
-    (await this.token.balanceOf.call(beneficiary2)).should.be.bignumber.equals(0);
+
+    await this.assertTokenBalance(beneficiary1, 0);
+    await this.assertTokenBalance(beneficiary2, 0);
   });
 
   it("check retrieve funds after vesting period is over", async function () {
@@ -145,7 +146,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.teamTokenVesting.addVesting.sendTransaction(beneficiary1, tokenAmountInWei);
     await this.teamTokenVesting.addVesting.sendTransaction(beneficiary2, tokenAmountInWei);
 
-    await increaseTimeTo(this.endTime.add(duration.days(365 * 2)));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 2 ) + duration.hours(1));
     
     await this.teamTokenVesting.transferReleasedVestedFunds.sendTransaction();
     await this.assertTokenBalance(beneficiary1, 0.5);
