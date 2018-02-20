@@ -219,27 +219,23 @@ contract CUZFutureDevelopmentWallet is Ownable {
   }
 
   function release() public hasToken returns (bool) {
-    require(token.balanceOf(this).sub(releasedAmountInWei) == 72000000 * 10 ** 18);  // sanity check
+    require(token.balanceOf(this).sub(releasedAmountInWei) == 300000000 * (21 / 100) * 10 ** 18);  // sanity check
 
     // cliff is 1 year, before that do nothing
     require(now >= vestingStartTime.add(86400 * 365));
 
     // make sure we have un-released funds left
-    require(releasedAmountInWei < 72000000 * 10 ** 18);
+    require(releasedAmountInWei < 300000000 * (21 / 100) * 10 ** 18);
 
     // calculate the amount released.
-    // after first 24 months -> 50%
-    // every month until 2 years have passed -> a 48th of the total amount
-    uint256 monthsPassed = now.sub(vestingStartTime).div((365 * 4 + 1) / 12 * 100).div(100) % 1;
-    uint256 amountToReleaseInWei = monthsPassed.mul(72000000 / 48 * 10 ** 18).sub(releasedAmountInWei);
+    // every month until 4 years have passed -> a 48th of the total amount
+    uint256 monthsPassed = now.sub(vestingStartTime).div((365 * 4 + 1) / 48 * 86400);
+    uint256 amountToReleaseInWei = monthsPassed.mul(300000000 * (21 / 100) / 48 * 10 ** 18).sub(releasedAmountInWei);
 
-    if (amountToReleaseInWei > 0) {
-      token.safeTransfer(owner, amountToReleaseInWei);
-      releasedAmountInWei = releasedAmountInWei.add(amountToReleaseInWei);
-      return true;
-    } else {
-      return false;
-    }
+    require(amountToReleaseInWei > 0);
+
+    token.safeTransfer(owner, amountToReleaseInWei);
+    releasedAmountInWei = releasedAmountInWei.add(amountToReleaseInWei);
   }
 }
 

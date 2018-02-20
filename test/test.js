@@ -402,6 +402,36 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.assertTokenBalance(investor1, (new BigNumber(15 * 3770)).add((crowdTokens.div(3)).div(1e18)));
     await this.assertTokenBalance(investor2, (await this.token.balanceOf(investor1)).mul(2).div(1e18));
   });
+
+  it("[future development wallet] test cannot receive money before 12 month cliff", async function () {
+    const owner = accounts[0];
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(364));
+
+    const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
+
+    await this.futureDevelopmentWallet.release.sendTransaction().should.be.rejectedWith(EVMRevert);
+    await this.assertTokenBalance(owner, oldBalance);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(365) + duration.days(1));
+
+    await this.futureDevelopmentWallet.release.sendTransaction();
+
+    await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21 * 0.25));
+  });
+
+  it("[future development wallet] test withdraw all funds at once", async function () {
+    const owner = accounts[0];
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(364));
+
+    const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 4 + 1) + duration.hours(5));
+    await this.futureDevelopmentWallet.release.sendTransaction();
+
+    await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21));
+  });
 });
 
 contract('CUZToken', function(accounts) {
