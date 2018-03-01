@@ -266,6 +266,18 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     tokenVesting = _tokenVesting;
   }
 
+  function setExpenses(uint256 expensesInWei) onlyOwner {
+    require(isPrivateSale());
+    require(weiRaised == 0);
+    require(expensesInWei > 0);
+
+    weiRaised = weiRaised.add(expensesInWei);
+    contributionsInWei[wallet] = expensesInWei;
+    contributors.push(wallet);
+
+    token.mint(wallet, getTokenAmount(expensesInWei));
+  }
+
   function isPrivateSale() internal view returns (bool)
   {
     return (now < presaleStartTime);

@@ -65,6 +65,8 @@ function $beforeEach(accounts) {
     await token.transferOwnership.sendTransaction(tokenSale.address);
     await tokenVesting.transferOwnership.sendTransaction(tokenSale.address);
 
+    await tokenSale.setExpenses.sendTransaction(1000 * 10 ** 18);
+
     this.assertTokenBalance = (address, expected) => assertTokenBalance(token, address, expected);
     this.assertVestedBalance = (address, expected) => assertVestedBalance(tokenVesting, address, expected);
 
@@ -412,15 +414,15 @@ contract('CUZTeamTokenVesting', function(accounts) {
     const investor = accounts[4];
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
-    await this.invest(investor, 17500);
-    await this.assertTokenBalance(investor, 65975000);
+    await this.invest(investor, 16500);
+    await this.assertTokenBalance(investor, 16500 * 3770);
   });
 
   it("can't invest after eth cap has been reached", async function() {
     const investor1 = accounts[4], investor2 = accounts[5];
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
-    await this.invest(investor1, 17500);
+    await this.invest(investor1, 16500);
 
     await this.invest(investor2, 1, {shouldFail: true});
 
@@ -449,9 +451,9 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 10000);
-    await this.invest(investor1, 7000);
+    await this.invest(investor1, 6000);
 
-    await this.assertTokenBalance(investor1, 64090000);
+    await this.assertTokenBalance(investor1, 16000 * 3770);
 
     await this.invest(investor2, 501, {shouldFail: true});
     await this.assertTokenBalance(investor2, 0);
@@ -498,17 +500,17 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('test release unsold tokens', async function () {
     const investor1 = accounts[3], investor2 = accounts[4];
 
-    const oldWalletBalance = (await this.token.balanceOf(accounts[0])).div(1e18);
+    const oldOwnerBalance = (await this.token.balanceOf(accounts[0])).div(1e18);
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
-    await this.invest(investor1, 15);
-    await this.assertTokenBalance(investor1, 15 * 3770);
-    await this.assertVestedBalance(investor1, 15 * 3770 * 0.25);
+    await this.invest(investor1, 1000);
+    await this.assertTokenBalance(investor1, 1000 * 3770);
+    await this.assertVestedBalance(investor1, 1000 * 3770 * 0.5);
 
     await this.fastForwardToAfterCrowdsaleStart(duration.hours(1));
-    await this.invest(investor2, 30);
-    await this.assertTokenBalance(investor2, 30 * 3770);
-    await this.assertVestedBalance(investor2, 30 * 3770 * 0.20);
+    await this.invest(investor2, 2000);
+    await this.assertTokenBalance(investor2, 2000 * 3770);
+    await this.assertVestedBalance(investor2, 2000 * 3770 * 0.2);
 
     const tokensLeft = (await this.token.cap()).sub(await this.token.totalSupply());
     const companyTokens = tokensLeft.mul(0.67);
@@ -517,8 +519,8 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(1));
     await this.tokenSale.releaseUnsoldTokens.sendTransaction();
 
-    await this.assertTokenBalance(accounts[0], oldWalletBalance.add(companyTokens.div(1e18)));
-    await this.assertTokenBalance(investor1, (new BigNumber(15 * 3770)).add((crowdTokens.div(3)).div(1e18)));
+    await this.assertTokenBalance(accounts[0], oldOwnerBalance.add(companyTokens.div(1e18)).add(crowdTokens.div(1e18).div(4)));
+    await this.assertTokenBalance(investor1, (new BigNumber(1000 * 3770)).add((crowdTokens.div(4)).div(1e18)));
     await this.assertTokenBalance(investor2, (await this.token.balanceOf(investor1)).mul(2).div(1e18));
   });
 
