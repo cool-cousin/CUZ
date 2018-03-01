@@ -383,9 +383,13 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     }
 
     bool withinPeriod = now <= endTime;  // make sure we are not past the end of the public crowdsale
-    bool lowerThanMinimum = msg.value >= 0.1 * 10 ** 18;  // the minimum contribution is 0.1eth
+    bool higherThanMinimum = msg.value >= 0.1 * 10 ** 18;  // the minimum contribution is 0.1eth
+    bool lowerThanMaximum = (now < presaleStartTime  // the first 3 hours of the presale have a maximum contribution of 3 eth
+      || now >= presaleStartTime.add(3600 * 3)
+      || msg.value.add(contributionsInWei[msg.sender]) <= 3 * 10 ** 18  // take into account any previous contributions
+    );
     bool withinCap = weiRaised.add(msg.value) <= cap;  // make sure we have not passed the eth contribution cap
-    return withinCap && withinPeriod && lowerThanMinimum;
+    return withinCap && withinPeriod && higherThanMinimum && lowerThanMaximum;
   }
 
   function setWhitelistedAmount(address wallet, uint256 amountInWei) onlyOwner public {

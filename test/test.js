@@ -245,7 +245,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('[presale] get 20% bonus on 0.1-10 eth', async function() {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 1);
     await this.invest(investor2, 10);
 
@@ -269,7 +269,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('[presale] get 25% bonus on >10-50 eth', async function() {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 15);
     await this.invest(investor2, 50);
 
@@ -295,7 +295,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('[presale] get 30% bonus on >50-100 eth', async function() {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 55);
     await this.invest(investor2, 100);
 
@@ -321,7 +321,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('[presale] get 35% bonus on >100-250 eth', async function() {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 110);
     await this.invest(investor2, 250);
 
@@ -347,7 +347,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('[presale] get 40% bonus on >250-500 eth', async function() {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 255);
     await this.invest(investor2, 500);
 
@@ -373,7 +373,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it('[presale] get 50% bonus on >500 eth', async function() {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 510);
     await this.invest(investor2, 550);
 
@@ -396,10 +396,22 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.assertTokenBalance(investor2, 550 * 3770 * 1.5);
   });
 
+  it(`can't invest more than maximum for first 3 hours`, async function() {
+    const investor = accounts[2];
+
+    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.invest(investor, 5, {shouldFail: true});
+    await this.invest(investor, 2);
+    await this.invest(investor, 3, {shouldFail: true});
+
+    await this.assertTokenBalance(investor, 2 * 3770);
+    await this.assertVestedBalance(investor, 2 * 3770 * 0.2);
+  });
+
   it('buy whole supply', async function() {
     const investor = accounts[4];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor, 17500);
     await this.assertTokenBalance(investor, 65975000);
   });
@@ -407,7 +419,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("can't invest after eth cap has been reached", async function() {
     const investor1 = accounts[4], investor2 = accounts[5];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 17500);
 
     await this.invest(investor2, 1, {shouldFail: true});
@@ -420,7 +432,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("can't invest after crowdsale has ended", async function() {
     const investor1 = accounts[4], investor2 = accounts[5];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 1);
     await this.tokenSale.hasEnded().should.eventually.be.false;
 
@@ -435,7 +447,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("can't buy more than supply left", async function() {
     const investor1 = accounts[4], investor2 = accounts[5];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 10000);
     await this.invest(investor1, 7000);
 
@@ -448,7 +460,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("can't buy if not whitelisted", async function () {
     const investor = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor, 1, {setWhitelist: false, shouldFail: true});
     await this.assertTokenBalance(investor, 0);
     await this.assertVestedBalance(investor, 0);
@@ -459,7 +471,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, 1 * 10 ** 18);
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor, 1.5, {setWhitelist: false, shouldFail: true});
     await this.assertTokenBalance(investor, 0);
     await this.assertVestedBalance(investor, 0);
@@ -476,7 +488,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("transfer coins between 2 accounts", async function () {
     const investor1 = accounts[2], investor2 = accounts[3];
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 15);
 
     await this.token.transfer.sendTransaction(investor2, 100 * 10 ** 18, {from: investor1})
@@ -488,7 +500,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     const oldWalletBalance = (await this.token.balanceOf(accounts[0])).div(1e18);
 
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 15);
     await this.assertTokenBalance(investor1, 15 * 3770);
     await this.assertVestedBalance(investor1, 15 * 3770 * 0.25);
