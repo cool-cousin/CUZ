@@ -102,7 +102,6 @@ contract CUZNormalTokenVesting is Ownable {
 
   ERC20Basic public token;
   uint256 public endTime;
-  Vesting[] public vestings;
 
   modifier hasToken() {
     require(token != address(0));
@@ -115,51 +114,11 @@ contract CUZNormalTokenVesting is Ownable {
     token = token_;
   }
 
-  function addVesting(address beneficiary, uint256 weiAmount) public hasToken onlyOwner {
-    uint256 totalReservedWeiAmount = 0;
-    uint256 balance = token.balanceOf(this);
-
-    for (uint i = 0; i < vestings.length; i++) {
-      totalReservedWeiAmount = totalReservedWeiAmount.add(vestings[i].weiAmount);
-    }
-
-    require(totalReservedWeiAmount.add(weiAmount) <= balance);
-
-    vestings.push(Vesting(beneficiary, weiAmount));
-  }
-
-  function vestedAmount(address beneficiary) public hasToken view returns(uint256 result) {
-    for (uint256 i = 0; i < vestings.length; i++) {
-      Vesting storage curVesting = vestings[i];
-
-      if (curVesting.beneficiary == beneficiary) {
-        result = result.add(vestings[i].weiAmount);
-      }
-    }
-  }
-
   // TODO: reduce code duplication
   function transferReleasedVestedFunds() public hasToken {
     require(now >= endTime);
 
-    for (uint i = 0; i < vestings.length; i++) {
-      Vesting storage outerVesting = vestings[i];
-      address beneficiary = outerVesting.beneficiary;
-      uint256 weiAmount = 0;
-
-      for (uint j = 0; j < vestings.length; j++) {
-        Vesting storage innerVesting = vestings[j];
-
-        if (innerVesting.beneficiary == beneficiary) {
-          weiAmount = weiAmount.add(innerVesting.weiAmount);
-          innerVesting.weiAmount = 0;
-        }
-      }
-
-      if (weiAmount > 0) {
-        token.safeTransfer(beneficiary, weiAmount);
-      }
-    }
+    token.safeTransfer(owner, token.balanceOf(this));
   }
 }
 

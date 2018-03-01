@@ -114,50 +114,31 @@ function $beforeEach(accounts) {
 contract('CUZTeamTokenVesting', function(accounts) {
   beforeEach($beforeEach(accounts));
 
-  it("check cannot reserve more than given value", async function () {
-    const teamMember = accounts[2];
-
-    await this.teamTokenVesting.addVesting.sendTransaction(
-      teamMember,
-      (new BigNumber(300000000)).mul(1e18)
-    ).should.be.rejectedWith(EVMRevert);
-  });
-
   it("check cannot retrieve funds before vesting period is over", async function () {
-    const beneficiary1 = accounts[2], beneficiary2 = accounts[3];
-
-    await this.assertTokenBalance(beneficiary1, 0);
-    await this.assertTokenBalance(beneficiary2, 0);
-
-    const tokenAmountInWei = web3.toWei(0.5, 'ether');
-    await this.teamTokenVesting.addVesting.sendTransaction(beneficiary1, tokenAmountInWei);
-    await this.teamTokenVesting.addVesting.sendTransaction(beneficiary2, tokenAmountInWei);
-
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 2 - 1));
+
+    const oldOwnerBalance = (await this.token.balanceOf(accounts[0])).div(1e18);
     
     await this.teamTokenVesting.transferReleasedVestedFunds.sendTransaction().should.be.rejectedWith(EVMRevert);
 
-    await this.assertTokenBalance(beneficiary1, 0);
-    await this.assertTokenBalance(beneficiary2, 0);
+    await this.assertTokenBalance(accounts[0], oldOwnerBalance);
   });
 
   it("check retrieve funds after vesting period is over", async function () {
-    const beneficiary1 = accounts[2], beneficiary2 = accounts[3];
+    const oldOwnerBalance = (await this.token.balanceOf(accounts[0])).div(1e18);
+    const tokenAmount = (await this.token.balanceOf(this.teamTokenVesting.address)).div(1e18);
 
-    const tokenAmountInWei = web3.toWei(0.5, 'ether');
-    await this.teamTokenVesting.addVesting.sendTransaction(beneficiary1, tokenAmountInWei);
-    await this.teamTokenVesting.addVesting.sendTransaction(beneficiary2, tokenAmountInWei);
-
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 2 ) + duration.hours(1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 2) + duration.hours(1));
     
     await this.teamTokenVesting.transferReleasedVestedFunds.sendTransaction();
-    await this.assertTokenBalance(beneficiary1, 0.5);
-    await this.assertTokenBalance(beneficiary2, 0.5);
+
+    await this.assertTokenBalance(accounts[0], oldOwnerBalance.add(tokenAmount));
   });
 
   it("fail to invest with less than minimum eth", async function() {
     const investor = accounts[2];
 
+    await this.fastForwardToAfterCrowdsaleStart(duration.hours(1));
     await this.invest(investor, 0.05, {shouldFail: true});
     await this.assertVestedBalance(investor, 0);
     await this.assertTokenBalance(investor, 0);
