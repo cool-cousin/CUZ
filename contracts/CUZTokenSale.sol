@@ -371,6 +371,12 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     whitelistedAmountInWei[wallet] = whitelistedAmountInWei[wallet].add(amountInWei);
   }
 
+  function finalize() onlyOwner public {
+    require(now > endTime || cap <= weiRaised);
+
+    token.transferOwnership(owner);
+  }
+
   function releaseUnsoldTokens() public {
     require(now > endTime);
     require(weiRaised > 0);

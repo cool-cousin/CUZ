@@ -528,6 +528,35 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.assertTokenBalance(investor2, (await this.token.balanceOf(investor1)).mul(2).div(1e18));
   });
 
+  it('test transfer ownership of token back to owner after crowdsale period end', async function () {
+    const owner = accounts[0];
+
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
+    await this.tokenSale.finalize().should.be.rejectedWith(EVMRevert);
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.hours(1));
+    await this.tokenSale.finalize();
+
+    assert (await this.token.owner()) == owner;
+  });
+
+  it('test transfer ownership of token back to owner after cap reached', async function () {
+    const owner = accounts[0];
+    const investor = accounts[3];
+
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
+
+    await this.tokenSale.finalize().should.be.rejectedWith(EVMRevert);
+
+    await this.invest(investor, 10000);
+    await this.tokenSale.finalize().should.be.rejectedWith(EVMRevert);
+
+    await this.invest(investor, 6500);
+    await this.tokenSale.finalize();
+
+    assert (await this.token.owner()) == owner;
+  });
+
   it("[future development wallet] test cannot receive money before 12 month cliff", async function () {
     const owner = accounts[0];
 
