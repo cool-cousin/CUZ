@@ -367,7 +367,7 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     whitelistedAmountInWei[wallet] = amountInWei;
   }
 
-  function increateWhiteListedAmount(address wallet, uint256 amountInWei) onlyOwner public {
+  function increaseWhiteListedAmount(address wallet, uint256 amountInWei) onlyOwner public {
     whitelistedAmountInWei[wallet] = whitelistedAmountInWei[wallet].add(amountInWei);
   }
 
