@@ -455,11 +455,34 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, 1 * 10 ** 18);
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
+
+    await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, web3.toWei(1, 'ether'));
+
     await this.invest(investor, 1.5, {setWhitelist: false, shouldFail: true});
     await this.assertTokenBalance(investor, 0);
     await this.assertVestedBalance(investor, 0);
 
-    await this.invest(investor, 1);
+    await this.invest(investor, 1, {setWhitelist: false, shouldFail: false});
+    await this.assertTokenBalance(investor, 1 * 3770);
+    await this.assertVestedBalance(investor, 1 * 0.2 * 3770);
+  });
+
+  it("test whitelisted amount is depleted", async function () {
+    const investor = accounts[3];
+
+    await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, 1 * 10 ** 18);
+
+    await this.fastForwardToAfterPresaleStart(duration.hours(12));
+
+    await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, web3.toWei(1, 'ether'));
+
+    await this.invest(investor, 1.0, {setWhitelist: false, shouldFail: false});
+    await this.assertTokenBalance(investor, 1 * 3770);
+    await this.assertVestedBalance(investor, 1 * 0.2 * 3770);
+
+    await this.invest(investor, 1.0, {setWhitelist: false, shouldFail: true});
+    await this.assertTokenBalance(investor, 1 * 3770);
+    await this.assertVestedBalance(investor, 1 * 0.2 * 3770);
   });
 
   it("check team allocation", async function () {

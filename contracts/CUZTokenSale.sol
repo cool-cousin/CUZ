@@ -264,7 +264,7 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
 
     // during the private sale, the sender/wallet owner (verified that they are one and the same in `validPurchase`) does not need to be whitelisted
     if (!isPrivateSale()) {
-      whitelistedAmountInWei[beneficiary].sub(msg.value);
+      whitelistedAmountInWei[beneficiary] = whitelistedAmountInWei[beneficiary].sub(msg.value);
     }
 
     uint256 bonusWeiAmount;
