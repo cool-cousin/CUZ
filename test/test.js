@@ -535,6 +535,27 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21));
   });
 
+  it("[future development wallet] test withdraw funds in batches", async function () {
+    const owner = accounts[0];
+
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(150));
+
+    const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
+    let latestBalance = oldBalance;
+
+    for (let i of _.range(1, 5)) {
+      await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * i + 1) + duration.hours(5));
+      await this.futureDevelopmentWallet.release.sendTransaction();
+
+      const newBalance = (await this.token.balanceOf(owner)).div(1e18);
+
+      newBalance.should.be.bignumber.above(latestBalance);
+      latestBalance = newBalance;
+    }
+
+    await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21));
+  });
+
   it("[private presale] only owner can invest", async function () {
     await this.tokenSale.owner().should.eventually.be.equal(accounts[0]);
 

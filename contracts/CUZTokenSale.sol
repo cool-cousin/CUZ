@@ -178,7 +178,7 @@ contract CUZFutureDevelopmentWallet is Ownable {
   }
 
   function release() public hasToken returns (bool) {
-    require(token.balanceOf(this).sub(releasedAmountInWei) == 300000000 * (21 / 100) * 10 ** 18);  // sanity check
+    require(token.balanceOf(this).add(releasedAmountInWei) == 300000000 * (21 / 100) * 10 ** 18);  // sanity check
 
     // cliff is 1 year, before that do nothing
     require(now >= vestingStartTime.add(86400 * 365));
