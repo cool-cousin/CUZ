@@ -634,8 +634,12 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await increaseTimeTo(crazySaleStartTime.add(duration.hours(1)));
 
+    await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, 0);
+    await this.invest(investor, 1000, {setWhitelist: false, shouldFail: true});
+
     await this.invest(investor, 1000);
     await this.assertTokenBalance(investor, crazySaleRate.mul(1000));
+    await this.assertVestedBalance(investor, 0);
 
     await increaseTimeTo(crazySaleStartTime.add(duration.hours(25)));
 

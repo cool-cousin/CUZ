@@ -295,7 +295,7 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
           vestingDuration = MONTH;
         }
       }
-    } else {
+    } else if (isPreSale()) {
       // public pre-sale have bonuses based on contribution amount
 
       if (msg.value <= 10 * 10 ** 18) {
