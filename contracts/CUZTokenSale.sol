@@ -6,23 +6,13 @@ import "../zeppelin-solidity/contracts/token/ERC20/CappedToken.sol";
 import "../zeppelin-solidity/contracts/token/ERC20/SafeERC20.sol";
 
 contract CUZ is CappedToken {
-  string public name = "CUZToken";
+  string public name = "CUZ";
   string public symbol = "CUZ";
   uint8 public decimals = 18;
 
-  function CUZ(address baeWallet, address teamWallet, address teamReserveWallet, address futureDevelopmentWallet) public
+  function CUZ() public
     CappedToken(300000000 * 10 ** 18)
   {
-    mint(baeWallet, 300000000 * (7.33 / 100) * 10 ** 18);
-    mint(teamWallet, 300000000 * (6.5 / 100) * 10 ** 18);
-    mint(teamReserveWallet, 300000000 * (3.5 / 100) * 10 ** 18);
-    mint(futureDevelopmentWallet, 300000000 * (21 / 100) * 10 ** 18);
-
-    mint(msg.sender, (
-      (300000000 * (0.67 / 100) * 10 ** 18) +  // bounty funds
-      (300000000 * (25 / 100) * 10 ** 18) +  // community funds
-      (300000000 * (3 / 100) * 10 ** 18)  // future funds - liquidated portion
-    ));
   }
 }
 
@@ -193,21 +183,33 @@ contract CUZFutureDevelopmentWallet is Ownable {
   }
 }
 
+
+
+
+
+
+// start of crowd sale
+
 contract CUZTokenSale is CappedCrowdsale, Ownable {
   using SafeMath for uint256;
   using SafeERC20 for MintableToken;
 
   CUZCrowdsaleTokenVesting public tokenVesting;
   mapping(address => uint256) public whitelistedAmountInWei;
-  uint256 constant private MONTH = 86400 * 30;
+  uint256 constant private DAY = 24 * 60 * 60;
+  uint256 constant private MONTH = DAY * 30;
 
   mapping(address => uint256) public contributionsInWei;
   address[] contributors;
 
   uint256 public presaleStartTime;
+  uint256 constant private presaleDuration = DAY;
 
+  uint256 public crazySaleStartTime;
+  uint256 public crazySaleEndTime;
+  uint256 public crazySaleRate;
 
-  function CUZTokenSale(uint256 _presaleStartTime, uint256 _startTime, uint256 _endTime,
+  function CUZTokenSale(uint256 _presaleStartTime, uint256 _startTime, uint256 _endTime, uint256 _privateSaleWeiRaised,
                         MintableToken _token, CUZCrowdsaleTokenVesting _tokenVesting, address _wallet)
     public
     CappedCrowdsale(17500 * 10 ** 18)
@@ -216,34 +218,45 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   {
     require(_startTime > _presaleStartTime);
 
+    weiRaised = weiRaised.add(_privateSaleWeiRaised);
+
+    contributionsInWei[_wallet] = _privateSaleWeiRaised;
+    contributors.push(_wallet);
+
     presaleStartTime = _presaleStartTime;
     tokenVesting = _tokenVesting;
   }
 
-  function setExpenses(uint256 expensesInWei) onlyOwner {
-    require(isPrivateSale());
-    require(weiRaised == 0);
-    require(expensesInWei > 0);
-
-    weiRaised = weiRaised.add(expensesInWei);
-    contributionsInWei[wallet] = expensesInWei;
-    contributors.push(wallet);
-
-    token.mint(wallet, getTokenAmount(expensesInWei));
-  }
-
-  function isPrivateSale() internal view returns (bool)
-  {
-    return (now < presaleStartTime);
-  }
-
   function isPreSale() internal view returns (bool)
   {
-    return (now > presaleStartTime && now < startTime);
+    return (now >= presaleStartTime && now < presaleStartTime.add(presaleDuration));
   }
 
-  function isPublicSale() internal view returns (bool) {
-    return (now > startTime);
+  function isCrazySale() internal view returns (bool)
+  {
+    return crazySaleStartTime > 0 && now >= crazySaleStartTime && now < crazySaleEndTime;
+  }
+
+  function isPublicSale() internal view returns (bool)
+  {
+    return (now >= startTime && now < endTime);
+  }
+
+  function startCrazySale(uint256 startTime_, uint256 duration_, uint256 rate_) public onlyOwner {
+    require(crazySaleStartTime == 0 || now < crazySaleStartTime);
+
+    crazySaleStartTime = startTime_;
+    crazySaleEndTime = crazySaleStartTime.add(duration_);
+    crazySaleRate = rate_;
+  }
+
+  // override get token amount to use 'crazy sale' rate during crazy sale
+  function getTokenAmount(uint256 weiAmount) internal view returns(uint256) {
+    if (!isCrazySale()) {
+      return weiAmount.mul(rate);
+    } else {
+      return weiAmount.mul(crazySaleRate);
+    }
   }
 
   function buyTokens(address beneficiary) public payable {
@@ -256,11 +269,7 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     }
 
     contributionsInWei[beneficiary] = contributionsInWei[beneficiary].add(msg.value);
-
-    // during the private sale, the sender/wallet owner (verified that they are one and the same in `validPurchase`) does not need to be whitelisted
-    if (!isPrivateSale()) {
-      whitelistedAmountInWei[beneficiary] = whitelistedAmountInWei[beneficiary].sub(msg.value);
-    }
+    whitelistedAmountInWei[beneficiary] = whitelistedAmountInWei[beneficiary].sub(msg.value);
 
     uint256 bonusWeiAmount;
     uint256 vestingDuration;
@@ -286,7 +295,7 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
         }
       }
     } else {
-      // private sale and public pre-sale have bonuses based on contribution amount
+      // public pre-sale have bonuses based on contribution amount
 
       if (msg.value <= 10 * 10 ** 18) {
         // 20% on 0.1(min)eth->10 eth
@@ -316,15 +325,10 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     }
 
     if (bonusWeiAmount > 0) {
-      if (!isPrivateSale()) {
-          // mint the tokens to the vesting contract
-          token.mint(tokenVesting, bonusWeiAmount);
-          // register the vesting for the beneficiary
-          tokenVesting.addVesting(beneficiary, bonusWeiAmount, endTime.add(vestingDuration));
-        } else {
-          // tokens received in the private sale should not be vested in any way, just passed to the wallet owner
-          token.mint(beneficiary, bonusWeiAmount);
-        }
+        // mint the tokens to the vesting contract
+        token.mint(tokenVesting, bonusWeiAmount);
+        // register the vesting for the beneficiary
+        tokenVesting.addVesting(beneficiary, bonusWeiAmount, endTime.add(vestingDuration));
     }
   }
 
@@ -342,20 +346,27 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   }
 
   function validPurchase() internal view returns (bool) {
-    if ((now < presaleStartTime && msg.sender != wallet) ||  // only the wallet owner can invest during the private sale (before public presale),
-                                                             // does not need to be whitelisted
-        whitelistedAmountInWei[msg.sender] < msg.value) {  // make sure the amount is whitelisted for this address
+    if (whitelistedAmountInWei[msg.sender] < msg.value) {  // make sure the amount is whitelisted for this address
       return false;
     }
 
-    bool withinPeriod = now <= endTime;  // make sure we are not past the end of the public crowdsale
+    // make sure we are in the midst of one of the three sales phases
+    if (!isPreSale() && !isCrazySale() && !isPublicSale()) {
+      return false;
+    }
+
     bool higherThanMinimum = msg.value >= 0.1 * 10 ** 18;  // the minimum contribution is 0.1eth
-    bool lowerThanMaximum = (now < presaleStartTime  // the first 3 hours of the presale have a maximum contribution of 3 eth
+
+    // for the first three hours of the presale there in a max contribution of 3 eth
+    bool lowerThanMaximum = (!isPreSale()
       || now >= presaleStartTime.add(3600 * 3)
       || msg.value.add(contributionsInWei[msg.sender]) <= 3 * 10 ** 18  // take into account any previous contributions
     );
-    bool withinCap = weiRaised.add(msg.value) <= cap;  // make sure we have not passed the eth contribution cap
-    return withinCap && withinPeriod && higherThanMinimum && lowerThanMaximum;
+
+    // make sure we have not passed the eth contribution cap
+    bool withinCap = weiRaised.add(msg.value) <= cap;
+
+    return withinCap && higherThanMinimum && lowerThanMaximum;
   }
 
   function setWhitelistedAmount(address wallet, uint256 amountInWei) onlyOwner public {

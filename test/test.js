@@ -43,10 +43,6 @@ function $beforeEach(accounts) {
     const futureDevelopmentWallet = this.futureDevelopmentWallet = await CUZFutureDevelopmentWallet.new(endTime);
 
     const token = this.token = await CUZ.new(
-      baeTokenVesting.address,
-      teamTokenVesting.address,
-      teamReserveTokenVesting.address,
-      futureDevelopmentWallet.address,
       {
         gas: 40000000000
       }
@@ -57,15 +53,24 @@ function $beforeEach(accounts) {
     await teamReserveTokenVesting.setToken.sendTransaction(token.address);
     await futureDevelopmentWallet.setToken.sendTransaction(token.address);
 
+    await token.mint.sendTransaction(baeTokenVesting.address, 300000000 * (7.33 / 100) * 10 ** 18);
+    await token.mint.sendTransaction(teamTokenVesting.address, 300000000 * (6.5 / 100) * 10 ** 18);
+    await token.mint.sendTransaction(teamReserveTokenVesting.address, 300000000 * (3.5 / 100) * 10 ** 18);
+    await token.mint.sendTransaction(futureDevelopmentWallet.address, 300000000 * (21 / 100) * 10 ** 18);
+
+    await token.mint.sendTransaction(accounts[0], (
+      (300000000 * (0.67 / 100) * 10 ** 18) +  // bounty funds
+      (300000000 * (25 / 100) * 10 ** 18) +  // community funds
+      (300000000 * (3 / 100) * 10 ** 18)  // future funds - liquidated portion
+    ))
+
     const tokenVesting = this.tokenVesting = await CUZCrowdsaleTokenVesting.new(token.address, {gas: 4000000});
     const tokenSale = this.tokenSale = await CUZTokenSale.new(
-      this.presaleStartTime, this.startTime, this.endTime, token.address, tokenVesting.address, accounts[0], {gas: 4000000}
+      this.presaleStartTime, this.startTime, this.endTime, web3.toWei(1000, 'ether'), token.address, tokenVesting.address, accounts[0], {gas: 4000000}
     );
 
     await token.transferOwnership.sendTransaction(tokenSale.address);
     await tokenVesting.transferOwnership.sendTransaction(tokenSale.address);
-
-    await tokenSale.setExpenses.sendTransaction(1000 * 10 ** 18);
 
     this.assertTokenBalance = (address, expected) => assertTokenBalance(token, address, expected);
     this.assertVestedBalance = (address, expected) => assertVestedBalance(tokenVesting, address, expected);
@@ -590,39 +595,22 @@ contract('CUZTeamTokenVesting', function(accounts) {
   it("[future development wallet] test withdraw funds in batches", async function () {
     const owner = accounts[0];
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(150));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(364));
 
     const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
-    let latestBalance = oldBalance;
+    let lastBalance = oldBalance;
 
     for (let i of _.range(1, 5)) {
       await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * i + 1) + duration.hours(5));
       await this.futureDevelopmentWallet.release.sendTransaction();
 
       const newBalance = (await this.token.balanceOf(owner)).div(1e18);
-
-      newBalance.should.be.bignumber.above(latestBalance);
-      latestBalance = newBalance;
+      newBalance.should.be.bignumber.above(lastBalance);
+      lastBalance = newBalance;
     }
 
     await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21));
-  });
-
-  it("[private presale] only owner can invest", async function () {
-    await this.tokenSale.owner().should.eventually.be.equal(accounts[0]);
-
-    await this.invest(accounts[1], 1, {shouldFail: true});
-    await this.invest(accounts[0], 1);
-  });
-
-  it('[private presale] bonus tokens should not be vested', async function () {
-    const owner = accounts[0];
-
-    const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
-
-    await this.invest(owner, 500);
-    await this.assertTokenBalance(owner, oldBalance.add(500 * 3770 * 1.4));
-  });
+  });  
 });
 
 contract('CUZToken', function(accounts) {
@@ -637,10 +625,6 @@ contract('CUZToken', function(accounts) {
     const futureDevWallet = await CUZFutureDevelopmentWallet.new(endTime);
 
     const token = await CUZ.new(
-      baeToken.address,
-      teamToken.address,
-      teamReserveToken.address,
-      futureDevWallet.address,
       {
         gas: 40000000,
       }
@@ -660,10 +644,6 @@ contract('CUZToken', function(accounts) {
     const futureDevWallet = await CUZFutureDevelopmentWallet.new(endTime);
 
     const token = await CUZ.new(
-      baeToken.address,
-      teamToken.address,
-      teamReserveToken.address,
-      futureDevWallet.address,
       {
         gas: 40000000
       }
