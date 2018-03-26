@@ -203,7 +203,7 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   address[] contributors;
 
   uint256 public presaleStartTime;
-  uint256 constant private presaleDuration = DAY;
+  uint256 constant public presaleDuration = DAY;
 
   uint256 public crazySaleStartTime;
   uint256 public crazySaleEndTime;
@@ -243,7 +243,8 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   }
 
   function startCrazySale(uint256 startTime_, uint256 duration_, uint256 rate_) public onlyOwner {
-    require(crazySaleStartTime == 0 || now < crazySaleStartTime);
+    require(crazySaleStartTime == 0 && (startTime_ > presaleStartTime.add(presaleDuration)) && (startTime_.add(duration_) < startTime));
+    require(now > presaleStartTime.add(presaleDuration) && now < startTime_);
 
     crazySaleStartTime = startTime_;
     crazySaleEndTime = crazySaleStartTime.add(duration_);

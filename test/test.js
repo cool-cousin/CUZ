@@ -34,7 +34,7 @@ require('chai')
 function $beforeEach(accounts) {
   return async function () {
     this.presaleStartTime = (new BigNumber(latestTime())).add(duration.hours(1));
-    this.startTime = this.presaleStartTime.add(duration.weeks(2)); // two weeks of public pre-sale
+    this.startTime = this.presaleStartTime.add(duration.weeks(2));
     const endTime = this.endTime = this.startTime.add(duration.weeks(4)); // 4 weeks of public sale
 
     const baeTokenVesting = this.baeTokenVesting = await CUZBAETokenVesting.new(endTime);
@@ -104,6 +104,10 @@ function $beforeEach(accounts) {
 
     this.fastForwardToAfterPresaleStart = async (duration_ = 0) => {
       await increaseTimeTo((await this.tokenSale.presaleStartTime()).add(duration_));
+    }
+
+    this.fastForwardToAfterPresaleEnd = async (duration_ = 0) => {
+      await increaseTimeTo((await this.tokenSale.presaleStartTime()).add(await this.tokenSale.presaleDuration()).add(duration_));
     }
 
     this.fastForwardToAfterCrowdsaleStart = async (duration_ = 0) => {
@@ -610,7 +614,36 @@ contract('CUZTeamTokenVesting', function(accounts) {
     }
 
     await this.assertTokenBalance(owner, oldBalance.add(300000000 * 0.21));
-  });  
+  });
+
+  it(`[crazy sale] basic test`, async function () {
+    const investor = accounts[1];
+
+    const crazySaleStartTime = (await this.tokenSale.startTime()).sub(duration.weeks(1));
+    const crazySaleRate = (await this.tokenSale.rate()).mul(2);
+
+    await this.tokenSale.startCrazySale.sendTransaction(crazySaleStartTime, duration.hours(24), crazySaleRate).should.be.rejectedWith(EVMRevert);
+
+    await this.fastForwardToAfterPresaleStart(duration.hours(1));
+    await this.tokenSale.startCrazySale.sendTransaction(crazySaleStartTime, duration.hours(24), crazySaleRate).should.be.rejectedWith(EVMRevert);
+
+    await this.fastForwardToAfterPresaleEnd(duration.days(1));
+    await this.tokenSale.startCrazySale.sendTransaction(crazySaleStartTime, duration.hours(24), crazySaleRate);
+
+    await this.invest(investor, 1000, {shouldFail: true});
+
+    await increaseTimeTo(crazySaleStartTime.add(duration.hours(1)));
+
+    await this.invest(investor, 1000);
+    await this.assertTokenBalance(investor, crazySaleRate.mul(1000));
+
+    await increaseTimeTo(crazySaleStartTime.add(duration.hours(25)));
+
+    await this.invest(investor, 1000, {shouldFail: true});
+
+    await this.tokenSale.startCrazySale.sendTransaction(crazySaleStartTime.add(duration.days(3)), duration.hours(24), crazySaleRate)
+      .should.be.rejectedWith(EVMRevert);
+  });
 });
 
 contract('CUZToken', function(accounts) {
