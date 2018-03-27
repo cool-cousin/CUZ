@@ -242,13 +242,28 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     return (now >= startTime && now < endTime);
   }
 
-  function startCrazySale(uint256 startTime_, uint256 duration_, uint256 rate_) public onlyOwner {
-    require(crazySaleStartTime == 0 && (startTime_ > presaleStartTime.add(presaleDuration)) && (startTime_.add(duration_) < startTime));
-    require(now > presaleStartTime.add(presaleDuration) && now < startTime_);
+  function startCrazySale(uint256 _crazySaleStartTime, uint256 _crazySaleDuration, uint256 _crazySaleRate) public onlyOwner {
+    /* conditions for registering a crazy sale:
+       - must have not already been registered
+       - crazy sale must start after end of public pre-sale
+       - crazy sale must end before start of public crowd-sale
+       - crazy sale start must be in the futrue
+       - current time must be after end of presale
+       - current time must be before start of crazy sale
+         (and inherently before start of public clowd-sale,
+         since the start of the crazy sale is checked to before the start of the crowdsale)
+    */
+    require(
+      crazySaleStartTime == 0 &&
+      _crazySaleStartTime > presaleStartTime.add(presaleDuration) &&
+      _crazySaleStartTime.add(_crazySaleDuration) < startTime &&
+      now > presaleStartTime.add(presaleDuration) &&
+      now < _crazySaleStartTime
+    );
 
-    crazySaleStartTime = startTime_;
-    crazySaleEndTime = crazySaleStartTime.add(duration_);
-    crazySaleRate = rate_;
+    crazySaleStartTime = _crazySaleStartTime;
+    crazySaleEndTime = crazySaleStartTime.add(_crazySaleDuration);
+    crazySaleRate = _crazySaleRate;
   }
 
   // override get token amount to use 'crazy sale' rate during crazy sale
