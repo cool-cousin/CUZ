@@ -247,6 +247,19 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     return (now >= startTime && now < endTime);
   }
 
+  function setPublicSaleTimes(uint256 newStartTime_, uint256 newEndTime_) public onlyOwner {
+    require (
+      !isPublicSale() &&
+      (newStartTime_ > presaleStartTime.add(presaleDuration)) &&
+      (newStartTime_ > now) &&
+      ((crazySaleStartTime == 0) || (newStartTime_ > crazySaleEndTime)) &&
+      (newEndTime_ > newStartTime_)
+    );
+
+    startTime = newStartTime_;
+    endTime = newEndTime_;
+  }
+
   function startCrazySale(uint256 _crazySaleStartTime, uint256 _crazySaleDuration, uint256 _crazySaleRate) public onlyOwner {
     /* conditions for registering a crazy sale:
        - must have not already been registered

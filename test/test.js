@@ -34,6 +34,7 @@ require('chai')
 function $beforeEach(accounts) {
   return async function () {
     this.presaleStartTime = (new BigNumber(latestTime())).add(duration.hours(1));
+    this.presaleDuration = duration.hours(24);
     this.startTime = this.presaleStartTime.add(duration.weeks(2));
     const endTime = this.endTime = this.startTime.add(duration.weeks(4)); // 4 weeks of public sale
 
@@ -122,6 +123,63 @@ function $beforeEach(accounts) {
 
 contract('CUZTeamTokenVesting', function(accounts) {
   beforeEach($beforeEach(accounts));
+
+  it(`check cannot set public sale to before presale end`, async function () {
+    const newStartTime = this.presaleStartTime.add(duration.hours(3));
+    const newEndTime = newStartTime.add(duration.hours(12));
+
+    await this.tokenSale.setPublicSaleTimes.sendTransaction(
+      newStartTime,
+      newEndTime
+    ).should.be.rejectedWith(EVMRevert);
+  });
+
+  it(`check cannot set public sale to past`, async function () {
+    await this.fastForwardToAfterPresaleEnd(duration.hours(12));
+
+    const newStartTime = this.presaleStartTime.add(this.presaleDuration).add(duration.hours(3));
+    const newEndTime = newStartTime.add(duration.hours(12));
+
+    await this.tokenSale.setPublicSaleTimes.sendTransaction(
+      newStartTime,
+      newEndTime
+    ).should.be.rejectedWith(EVMRevert);
+  });
+
+  it(`check cannot set public sale times during public sale`, async function () {
+    await this.fastForwardToAfterCrowdsaleStart(duration.hours(3));
+
+    const newStartTime = (await this.tokenSale.startTime()).add(duration.hours(12));
+    const newEndTime = newStartTime.add(duration.hours(12));
+
+    await this.tokenSale.setPublicSaleTimes.sendTransaction(
+      newStartTime,
+      newEndTime
+    ).should.be.rejectedWith(EVMRevert);
+  });
+
+  it(`check set public sale times`, async function () {
+    const newStartTime = (await this.tokenSale.startTime()).add(duration.days(30));
+    const newEndTime = newStartTime.add(duration.hours(12));
+
+    await this.tokenSale.setPublicSaleTimes.sendTransaction(
+      newStartTime,
+      newEndTime
+    );
+  });
+
+  it(`check only owner can set public sale times`, async function () {
+    const newStartTime = (await this.tokenSale.startTime()).add(duration.days(30));
+    const newEndTime = newStartTime.add(duration.hours(12));
+
+    await this.tokenSale.setPublicSaleTimes.sendTransaction(
+      newStartTime,
+      newEndTime,
+      {
+        from: accounts[2]
+      }
+    ).should.be.rejectedWith(EVMRevert);
+  });
 
   it("check cannot retrieve funds before vesting period is over", async function () {
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * 2 - 1));
