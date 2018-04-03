@@ -176,7 +176,12 @@ contract CUZFutureDevelopmentWallet is Ownable {
     uint256 monthsPassed = now.sub(vestingStartTime).div((365 * 4 + 1) / 48 * 86400);
     uint256 amountToReleaseInWei = monthsPassed.mul(300000000 * (21 / 100) / 48 * 10 ** 18).sub(releasedAmountInWei);
 
-    require(amountToReleaseInWei > 0 && token.balanceOf(this) >= amountToReleaseInWei);
+    require(amountToReleaseInWei > 0);
+
+    uint256 currentTokenBalanceInWei = token.balanceOf(this);
+    if (amountToReleaseInWei > currentTokenBalanceInWei) {
+      amountToReleaseInWei = currentTokenBalanceInWei;
+    }
 
     token.safeTransfer(owner, amountToReleaseInWei);
     releasedAmountInWei = releasedAmountInWei.add(amountToReleaseInWei);

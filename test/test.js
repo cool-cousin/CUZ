@@ -604,7 +604,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
     const oldBalance = (await this.token.balanceOf(owner)).div(1e18);
     let lastBalance = oldBalance;
 
-    for (let i of _.range(1, 5)) {
+    for (let i of [1, 2, 3, 10]) {
       await this.fastForwardToAfterCrowdsaleEnd(duration.days(365 * i + 1) + duration.hours(5));
       await this.futureDevelopmentWallet.release.sendTransaction();
 
