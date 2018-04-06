@@ -214,6 +214,8 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   uint256 public crazySaleEndTime;
   uint256 public crazySaleRate;
 
+  event WhitelistedAmountSet(address indexed contributor, uint256 amountInWei);
+
   function CUZTokenSale(uint256 _presaleStartTime, uint256 _startTime, uint256 _endTime, uint256 _privateSaleWeiRaised,
                         MintableToken _token, CUZCrowdsaleTokenVesting _tokenVesting, address _wallet)
     public
@@ -405,10 +407,11 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
 
   function setWhitelistedAmount(address wallet, uint256 amountInWei) onlyOwner public {
     whitelistedAmountInWei[wallet] = amountInWei;
+    WhitelistedAmountSet(wallet, amountInWei);
   }
 
   function increaseWhiteListedAmount(address wallet, uint256 amountInWei) onlyOwner public {
-    whitelistedAmountInWei[wallet] = whitelistedAmountInWei[wallet].add(amountInWei);
+    setWhitelistedAmount(wallet, whitelistedAmountInWei[wallet].add(amountInWei));
   }
 
   function finalize() onlyOwner public {
