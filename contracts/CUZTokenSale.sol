@@ -80,6 +80,85 @@ contract CUZCrowdsaleTokenVesting is Ownable {
   }
 }
 
+contract CUZCrowdsaleTokenLiquidizer is Ownable {
+  using SafeMath for uint256;
+  using SafeERC20 for CUZ;
+
+  struct LiquidableAmount {
+    address beneficiary;
+    uint256 weiAmount;
+  }
+
+  CUZ public token;
+  CUZTokenSale public tokenSale;
+
+  LiquidableAmount[] public vestings;
+
+  function CUZCrowdsaleTokenLiquidizer(CUZ _token) public
+    Ownable()
+  {
+    token = _token;
+  }
+
+  function setTokenSale(CUZTokenSale tokenSale_) public onlyOwner {
+    require(tokenSale == address(0) && tokenSale_ != address(0));
+
+    tokenSale = tokenSale_;
+  }
+
+  modifier contractsSet() {
+    require(token != address(0) && tokenSale != address(0));
+    _;
+  }
+
+  modifier crowdsaleFinished() {
+    require(tokenSale.hasEnded());
+    _;
+  }
+
+  function addLiquidableAmount(address beneficiary, uint256 weiAmount) public onlyOwner {
+    vestings.push(LiquidableAmount(beneficiary, weiAmount));
+  }
+
+  function liquidableAmount(address beneficiary) public view returns(uint256 result) {
+    for (uint256 i = 0; i < vestings.length; i++) {
+      LiquidableAmount storage curVesting = vestings[i];
+
+      if (curVesting.beneficiary == beneficiary) {
+        result = result.add(vestings[i].weiAmount);
+      }
+    }
+  }
+
+  // this function is very much not optimized (it runs in O(n^2) where n is the number of `Vesting` objects).
+  // the tradeoff in this function is so that the `addVesting` function can be much simpler, and cost less gas to the
+  // interested ICO invester.
+  // this function we can call ourselves, and pay the premium on the gas needed for the extra computation, rather than
+  // our contributors having to pay any extra.
+  function liquidateAllFunds() contractsSet crowdsaleFinished public {
+    for (uint i = 0; i < vestings.length; i++) {
+      liquidateFundsForAddress(vestings[i].beneficiary);
+    }
+  }
+
+  function liquidateFundsForAddress(address beneficiary) contractsSet crowdsaleFinished public {
+    uint256 weiAmount = 0;
+
+    for (uint i = 0; i < vestings.length; i++) {
+      LiquidableAmount storage vesting = vestings[i];
+
+      if (vesting.beneficiary == beneficiary) {
+        weiAmount = weiAmount.add(vesting.weiAmount);
+        vesting.weiAmount = 0;
+      }
+    }
+
+    if (weiAmount > 0) {
+      token.safeTransfer(beneficiary, weiAmount);
+    }
+  }
+}
+
 
 contract CUZNormalTokenVesting is Ownable {
   using SafeMath for uint256;
@@ -200,6 +279,8 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   using SafeERC20 for MintableToken;
 
   CUZCrowdsaleTokenVesting public tokenVesting;
+  CUZCrowdsaleTokenLiquidizer public tokenLiquidizer;
+
   mapping(address => uint256) public whitelistedAmountInWei;
   uint256 constant private DAY = 24 * 60 * 60;
   uint256 constant private MONTH = DAY * 30;
@@ -217,7 +298,8 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   event WhitelistedAmountSet(address indexed contributor, uint256 amountInWei);
 
   function CUZTokenSale(uint256 _presaleStartTime, uint256 _startTime, uint256 _endTime, uint256 _privateSaleWeiRaised,
-                        MintableToken _token, CUZCrowdsaleTokenVesting _tokenVesting, address _wallet)
+                        MintableToken _token, CUZCrowdsaleTokenLiquidizer _tokenLiquidizer, CUZCrowdsaleTokenVesting _tokenVesting,
+                        address _wallet)
     public
     CappedCrowdsale(17500 * 10 ** 18)
     Crowdsale(_startTime, _endTime, 3770, _wallet, _token)
@@ -231,7 +313,9 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     contributors.push(_wallet);
 
     presaleStartTime = _presaleStartTime;
+
     tokenVesting = _tokenVesting;
+    tokenLiquidizer = _tokenLiquidizer;
   }
 
   function isPreSale() internal view returns (bool)
@@ -296,7 +380,10 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   }
 
   function buyTokens(address beneficiary) public payable {
-    super.buyTokens(beneficiary);
+    uint256 tokenAmount = getTokenAmount(msg.value);
+    tokenLiquidizer.addLiquidableAmount(beneficiary, tokenAmount);
+
+    super.buyTokens(tokenLiquidizer);
 
     // we need to keep a list of contributors and their contributed amount in the case where we don't finish the crowdsale cap and 
     // have to distribute the remaining tokens to all participants
@@ -318,15 +405,15 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
       if (daysSinceStart < 14) {
         if (daysSinceStart < 1) {
           // 20% bonus in first 24 hours
-          bonusWeiAmount = getTokenAmount(msg.value).div(5);
+          bonusWeiAmount = tokenAmount.div(5);
           vestingDuration = MONTH * 3;
         } else if (daysSinceStart < 7) {
           // 10% bonus in days 2-7
-          bonusWeiAmount = getTokenAmount(msg.value).div(10);
+          bonusWeiAmount = tokenAmount.div(10);
           vestingDuration = MONTH * 3 / 2;
         } else {
           // 5% bonus in week 2
-          bonusWeiAmount = getTokenAmount(msg.value).div(20);
+          bonusWeiAmount = tokenAmount.div(20);
           vestingDuration = MONTH;
         }
       }
@@ -335,27 +422,27 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
 
       if (msg.value <= 10 * 10 ** 18) {
         // 20% on 0.1(min)eth->10 eth
-        bonusWeiAmount = getTokenAmount(msg.value).div(5);
+        bonusWeiAmount = tokenAmount.div(5);
         vestingDuration = MONTH * 3;
       } else if (msg.value <= 50 * 10 ** 18) {
         // 25% on 10eth->50eth
-        bonusWeiAmount = getTokenAmount(msg.value).div(4);
+        bonusWeiAmount = tokenAmount.div(4);
         vestingDuration = MONTH * 3;
       } else if (msg.value <= 100 * 10 ** 18) {
         // 30% on 50eth->100eth
-        bonusWeiAmount = getTokenAmount(msg.value).mul(30).div(100);
+        bonusWeiAmount = tokenAmount.mul(30).div(100);
         vestingDuration = MONTH * 6;
       } else if (msg.value <= 250 * 10 ** 18) {
         // 35% on 100eth->250eth
-        bonusWeiAmount = getTokenAmount(msg.value).mul(35).div(100);
+        bonusWeiAmount = tokenAmount.mul(35).div(100);
         vestingDuration = MONTH * 6;
       } else if (msg.value <= 500 * 10 ** 18) {
         // 40% on 250eth->500eth
-        bonusWeiAmount = getTokenAmount(msg.value).mul(4).div(10);
+        bonusWeiAmount = tokenAmount.mul(4).div(10);
         vestingDuration = MONTH * 9;
       } else {
         // 50% on >500eth
-        bonusWeiAmount = getTokenAmount(msg.value).div(2);
+        bonusWeiAmount = tokenAmount.div(2);
         vestingDuration = MONTH * 9;
       }
     }

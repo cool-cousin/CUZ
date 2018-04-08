@@ -5,6 +5,7 @@ const {duration} = require('../zeppelin-solidity/test/helpers/increaseTime');
 const CUZ = artifacts.require('./CUZ.sol');
 const CUZTokenSale = artifacts.require('./CUZTokenSale.sol');
 const CUZCrowdsaleTokenVesting = artifacts.require('./CUZCrowdsaleTokenVesting.sol');
+const CUZCrowdsaleTokenLiquidizer = artifacts.require('./CUZCrowdsaleTokenLiquidizer.sol');
 
 Promise = require('bluebird');
 
@@ -15,6 +16,9 @@ module.exports = function(deployer, network, accounts) {
 
 		await deployer.deploy(CUZCrowdsaleTokenVesting, cuz.address);
 		const crowdsaleTokenVesting = await CUZCrowdsaleTokenVesting.deployed();
+
+		await deployer.deploy(CUZCrowdsaleTokenLiquidizer, cuz.address);
+		const crowdsaleTokenLiquidizer = await CUZCrowdsaleTokenLiquidizer.deployed();
 
 		const presaleStartTime = timestamp + duration.minutes(10);  // start presale 10 minutes from now
 		const startTime = presaleStartTime + duration.days(1) + duration.days(7);  // start public crowdsale one week after presale end
@@ -28,6 +32,7 @@ module.exports = function(deployer, network, accounts) {
 			endTime,
 			privateSaleWeiRaised,
 			cuz.address,
+			crowdsaleTokenLiquidizer.address,
 			crowdsaleTokenVesting.address,
 			accounts[0]
 		);
