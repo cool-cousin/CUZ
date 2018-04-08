@@ -288,6 +288,8 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   mapping(address => uint256) public contributionsInWei;
   address[] contributors;
 
+  mapping(address => bool) private whitelistPermission;
+
   uint256 public presaleStartTime;
   uint256 constant public presaleDuration = DAY;
 
@@ -492,12 +494,21 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
     return withinCap && higherThanMinimum && lowerThanMaximum;
   }
 
-  function setWhitelistedAmount(address wallet, uint256 amountInWei) onlyOwner public {
+  function setWhitelistPermission(address address_, bool allow) onlyOwner public {
+    whitelistPermission[address_] = allow;
+  }
+
+  modifier onlyWhitelistAllowed() {
+    require(msg.sender == owner || whitelistPermission[msg.sender]);
+    _;
+  }
+
+  function setWhitelistedAmount(address wallet, uint256 amountInWei) onlyWhitelistAllowed public {
     whitelistedAmountInWei[wallet] = amountInWei;
     WhitelistedAmountSet(wallet, amountInWei);
   }
 
-  function increaseWhiteListedAmount(address wallet, uint256 amountInWei) onlyOwner public {
+  function increaseWhiteListedAmount(address wallet, uint256 amountInWei) onlyWhitelistAllowed public {
     setWhitelistedAmount(wallet, whitelistedAmountInWei[wallet].add(amountInWei));
   }
 
