@@ -1,5 +1,6 @@
 const CUZTokenSale = artifacts.require("CUZTokenSale");
 const CUZCrowdsaleTokenVesting = artifacts.require("CUZCrowdsaleTokenVesting");
+const CUZCrowdsaleTokenLiquidizer = artifacts.require("CUZCrowdsaleTokenLiquidizer");
 const CUZTeamTokenVesting = artifacts.require("CUZTeamTokenVesting");
 const CUZBAETokenVesting = artifacts.require("CUZTeamTokenVesting");
 const CUZFutureDevelopmentWallet = artifacts.require('CUZFutureDevelopmentWallet');
@@ -18,6 +19,11 @@ const BigNumber = web3.BigNumber;
 
 async function assertTokenBalance(token, address, expected) {
   const actual = await token.balanceOf(address);
+  actual.div(1e18).should.bignumber.equal(expected);
+};
+
+async function assertLiquidableTokenBalance(tokenLiquidizer, address, expected) {
+  const actual = await tokenLiquidizer.liquidableAmount(address);
   actual.div(1e18).should.bignumber.equal(expected);
 };
 
@@ -66,19 +72,31 @@ function $beforeEach(accounts) {
     ))
 
     const tokenVesting = this.tokenVesting = await CUZCrowdsaleTokenVesting.new(token.address, {gas: 4000000});
+    const tokenLiquidizer = this.tokenLiquidizer = await CUZCrowdsaleTokenLiquidizer.new(token.address, {gas: 4000000});
     const tokenSale = this.tokenSale = await CUZTokenSale.new(
-      this.presaleStartTime, this.startTime, this.endTime, web3.toWei(1000, 'ether'), token.address, tokenVesting.address, accounts[0], {gas: 4000000}
+      this.presaleStartTime,
+      this.startTime,
+      this.endTime,
+      web3.toWei(1000, 'ether'),
+      token.address,
+      tokenLiquidizer.address,
+      tokenVesting.address,
+      accounts[0],
+      {gas: 4000000}
     );
 
     await token.transferOwnership.sendTransaction(tokenSale.address);
+    await tokenLiquidizer.setTokenSale.sendTransaction(tokenSale.address);
+    await tokenLiquidizer.transferOwnership.sendTransaction(tokenSale.address);
     await tokenVesting.transferOwnership.sendTransaction(tokenSale.address);
 
     this.assertTokenBalance = (address, expected) => assertTokenBalance(token, address, expected);
     this.assertVestedBalance = (address, expected) => assertVestedBalance(tokenVesting, address, expected);
+    this.assertLiquidableTokenBalance = (address, expected) => assertLiquidableTokenBalance(tokenLiquidizer, address, expected);
 
     this.invest = async (address, etherAmount, {shouldFail = false, setWhitelist = true} = {}) => {
       const weiAmount = web3.toWei(etherAmount, 'ether');
-
+ 
       if (setWhitelist) {
         await this.tokenSale.setWhitelistedAmount.sendTransaction(address, weiAmount);
       }
@@ -208,7 +226,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.fastForwardToAfterCrowdsaleStart(duration.hours(1));
     await this.invest(investor, 0.05, {shouldFail: true});
     await this.assertVestedBalance(investor, 0);
-    await this.assertTokenBalance(investor, 0);
+    await this.assertLiquidableTokenBalance(investor, 0);
   });
 
   it('[sale] get 20% bonus in first 24 hours', async function() {
@@ -219,21 +237,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.fastForwardToAfterCrowdsaleStart(duration.hours(23));
     await this.invest(investor2, 2);
 
-    await this.assertTokenBalance(investor1, 3770);
-    await this.assertTokenBalance(investor2, 7540);
+    await this.assertLiquidableTokenBalance(investor1, 3770);
+    await this.assertLiquidableTokenBalance(investor2, 7540);
 
     await this.assertVestedBalance(investor1, 754);
     await this.assertVestedBalance(investor2, 1508);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 - 1));
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 3770);
     await this.assertTokenBalance(investor2, 7540);
+    await this.assertVestedBalance(investor1, 754);
+    await this.assertVestedBalance(investor2, 1508);
 
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 4524);
     await this.assertTokenBalance(investor2, 9048);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('[sale] get 10% bonus in days 2-7', async function() {
@@ -244,19 +271,26 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.fastForwardToAfterCrowdsaleStart(duration.days(6));
     await this.invest(investor2, 2);
 
-    await this.assertTokenBalance(investor1, 3770);
-    await this.assertTokenBalance(investor2, 7540);
+    await this.assertLiquidableTokenBalance(investor1, 3770);
+    await this.assertLiquidableTokenBalance(investor2, 7540);
 
     await this.assertVestedBalance(investor1, 377);
     await this.assertVestedBalance(investor2, 754);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 1.5 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 3770);
     await this.assertTokenBalance(investor2, 7540);
+    await this.assertVestedBalance(investor1, 377);
+    await this.assertVestedBalance(investor2, 754);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 1.5));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 1.5))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 4147);
     await this.assertTokenBalance(investor2, 8294);
     await this.assertVestedBalance(investor1, 0);
@@ -271,21 +305,26 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 1);
     await this.invest(investor2, 2);
 
-    await this.assertTokenBalance(investor1, 3770);
-    await this.assertTokenBalance(investor2, 7540);
+    await this.assertLiquidableTokenBalance(investor1, 3770);
+    await this.assertLiquidableTokenBalance(investor2, 7540);
 
     await this.assertVestedBalance(investor1, 188.5);
     await this.assertVestedBalance(investor2, 377);
 
-    // try to withdraw before vesting
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 3770);
     await this.assertTokenBalance(investor2, 7540);
+    await this.assertVestedBalance(investor1, 188.5);
+    await this.assertVestedBalance(investor2, 377);
 
-    // (successfuly) try to withdraw after vesting
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 3958.5);
     await this.assertTokenBalance(investor2, 7917);
     await this.assertVestedBalance(investor1, 0);
@@ -299,21 +338,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 1);
     await this.invest(investor2, 10);
 
-    await this.assertTokenBalance(investor1, 3770);
-    await this.assertTokenBalance(investor2, 37700);
+    await this.assertLiquidableTokenBalance(investor1, 3770);
+    await this.assertLiquidableTokenBalance(investor2, 37700);
 
     await this.assertVestedBalance(investor1, 754);
     await this.assertVestedBalance(investor2, 7540);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 3770);
     await this.assertTokenBalance(investor2, 37700);
+    await this.assertVestedBalance(investor1, 754);
+    await this.assertVestedBalance(investor2, 7540);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 + 1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 + 1))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 4524);
     await this.assertTokenBalance(investor2, 45240);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('[presale] get 25% bonus on >10-50 eth', async function() {
@@ -323,23 +371,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 15);
     await this.invest(investor2, 50);
 
-    await this.assertTokenBalance(investor1, 56550);
-    await this.assertTokenBalance(investor2, 188500);
+    await this.assertLiquidableTokenBalance(investor1, 56550);
+    await this.assertLiquidableTokenBalance(investor2, 188500);
 
     await this.assertVestedBalance(investor1, 14137.5);
     await this.assertVestedBalance(investor2, 47125);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 56550);
     await this.assertTokenBalance(investor2, 188500);
+    await this.assertVestedBalance(investor1, 14137.5);
+    await this.assertVestedBalance(investor2, 47125);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 + 1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 3 + 1))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
-    await this.assertVestedBalance(investor1, 0);
-    await this.assertVestedBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 70687.5);
     await this.assertTokenBalance(investor2, 235625);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('[presale] get 30% bonus on >50-100 eth', async function() {
@@ -349,23 +404,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 55);
     await this.invest(investor2, 100);
 
-    await this.assertTokenBalance(investor1, 55 * 3770);
-    await this.assertTokenBalance(investor2, 100 * 3770);
+    await this.assertLiquidableTokenBalance(investor1, 55 * 3770);
+    await this.assertLiquidableTokenBalance(investor2, 100 * 3770);
 
     await this.assertVestedBalance(investor1, 55 * 3770 * 0.3);
     await this.assertVestedBalance(investor2, 100 * 3770 * 0.3);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 55 * 3770);
     await this.assertTokenBalance(investor2, 100 * 3770);
+    await this.assertVestedBalance(investor1, 55 * 3770 * 0.3);
+    await this.assertVestedBalance(investor2, 100 * 3770 * 0.3);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 + 1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 + 1))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
-    await this.assertVestedBalance(investor1, 0);
-    await this.assertVestedBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 55 * 3770 * 1.3);
     await this.assertTokenBalance(investor2, 100 * 3770 * 1.3);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('[presale] get 35% bonus on >100-250 eth', async function() {
@@ -375,23 +437,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 110);
     await this.invest(investor2, 250);
 
-    await this.assertTokenBalance(investor1, 110 * 3770);
-    await this.assertTokenBalance(investor2, 250 * 3770);
+    await this.assertLiquidableTokenBalance(investor1, 110 * 3770);
+    await this.assertLiquidableTokenBalance(investor2, 250 * 3770);
 
     await this.assertVestedBalance(investor1, 110 * 3770 * 0.35);
     await this.assertVestedBalance(investor2, 250 * 3770 * 0.35);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 110 * 3770);
     await this.assertTokenBalance(investor2, 250 * 3770);
+    await this.assertVestedBalance(investor1, 110 * 3770 * 0.35);
+    await this.assertVestedBalance(investor2, 250 * 3770 * 0.35);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 + 1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 6 + 1))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
-    await this.assertVestedBalance(investor1, 0);
-    await this.assertVestedBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 110 * 3770 * 1.35);
     await this.assertTokenBalance(investor2, 250 * 3770 * 1.35);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('[presale] get 40% bonus on >250-500 eth', async function() {
@@ -401,23 +470,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 255);
     await this.invest(investor2, 500);
 
-    await this.assertTokenBalance(investor1, 255 * 3770);
-    await this.assertTokenBalance(investor2, 500 * 3770);
+    await this.assertLiquidableTokenBalance(investor1, 255 * 3770);
+    await this.assertLiquidableTokenBalance(investor2, 500 * 3770);
 
     await this.assertVestedBalance(investor1, 255 * 3770 * 0.4);
     await this.assertVestedBalance(investor2, 500 * 3770 * 0.4);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 255 * 3770);
     await this.assertTokenBalance(investor2, 500 * 3770);
+    await this.assertVestedBalance(investor1, 255 * 3770 * 0.4);
+    await this.assertVestedBalance(investor2, 500 * 3770 * 0.4);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 + 1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 + 1))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
-    await this.assertVestedBalance(investor1, 0);
-    await this.assertVestedBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 255 * 3770 * 1.4);
     await this.assertTokenBalance(investor2, 500 * 3770 * 1.4);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('[presale] get 50% bonus on >500 eth', async function() {
@@ -427,35 +503,30 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 510);
     await this.invest(investor2, 550);
 
-    await this.assertTokenBalance(investor1, 510 * 3770);
-    await this.assertTokenBalance(investor2, 550 * 3770);
+    await this.assertLiquidableTokenBalance(investor1, 510 * 3770);
+    await this.assertLiquidableTokenBalance(investor2, 550 * 3770);
 
     await this.assertVestedBalance(investor1, 510 * 3770 * 0.5);
     await this.assertVestedBalance(investor2, 550 * 3770 * 0.5);
 
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000}).should.be.rejectedWith(EVMRevert);
+
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 - 1));
-    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 4000000});
     await this.assertTokenBalance(investor1, 510 * 3770);
     await this.assertTokenBalance(investor2, 550 * 3770);
+    await this.assertVestedBalance(investor1, 510 * 3770 * 0.5);
+    await this.assertVestedBalance(investor2, 550 * 3770 * 0.5);
 
-    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 + 1));
+    await this.fastForwardToAfterCrowdsaleEnd(duration.days(30 * 9 + 1))
     await this.tokenVesting.transferReleasedVestedFunds.sendTransaction({gas: 300000});
-    await this.assertVestedBalance(investor1, 0);
-    await this.assertVestedBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor1, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertTokenBalance(investor1, 510 * 3770 * 1.5);
     await this.assertTokenBalance(investor2, 550 * 3770 * 1.5);
-  });
-
-  it(`can't invest more than maximum for first 3 hours`, async function() {
-    const investor = accounts[2];
-
-    await this.fastForwardToAfterPresaleStart(duration.minutes(15));
-    await this.invest(investor, 5, {shouldFail: true});
-    await this.invest(investor, 2);
-    await this.invest(investor, 3, {shouldFail: true});
-
-    await this.assertTokenBalance(investor, 2 * 3770);
-    await this.assertVestedBalance(investor, 2 * 3770 * 0.2);
+    await this.assertVestedBalance(investor1, 0);
+    await this.assertVestedBalance(investor2, 0);
   });
 
   it('buy whole supply', async function() {
@@ -463,7 +534,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor, 16500);
-    await this.assertTokenBalance(investor, 16500 * 3770);
+    await this.assertLiquidableTokenBalance(investor, 16500 * 3770);
   });
 
   it("can't invest after eth cap has been reached", async function() {
@@ -475,7 +546,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor2, 1, {shouldFail: true});
 
     await this.tokenSale.hasEnded().should.eventually.be.true;
-    await this.assertTokenBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertVestedBalance(investor2, 0);
   });
 
@@ -490,7 +561,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor2, 1, {shouldFail: true});
 
     await this.tokenSale.hasEnded().should.eventually.be.true;
-    await this.assertTokenBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
     await this.assertVestedBalance(investor2, 0);
   });
 
@@ -501,10 +572,10 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor1, 10000);
     await this.invest(investor1, 6000);
 
-    await this.assertTokenBalance(investor1, 16000 * 3770);
+    await this.assertLiquidableTokenBalance(investor1, 16000 * 3770);
 
     await this.invest(investor2, 501, {shouldFail: true});
-    await this.assertTokenBalance(investor2, 0);
+    await this.assertLiquidableTokenBalance(investor2, 0);
   });
 
   it("can't buy if not whitelisted", async function () {
@@ -512,7 +583,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor, 1, {setWhitelist: false, shouldFail: true});
-    await this.assertTokenBalance(investor, 0);
+    await this.assertLiquidableTokenBalance(investor, 0);
     await this.assertVestedBalance(investor, 0);
   });
 
@@ -526,11 +597,11 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, web3.toWei(1, 'ether'));
 
     await this.invest(investor, 1.5, {setWhitelist: false, shouldFail: true});
-    await this.assertTokenBalance(investor, 0);
+    await this.assertLiquidableTokenBalance(investor, 0);
     await this.assertVestedBalance(investor, 0);
 
     await this.invest(investor, 1, {setWhitelist: false, shouldFail: false});
-    await this.assertTokenBalance(investor, 1 * 3770);
+    await this.assertLiquidableTokenBalance(investor, 1 * 3770);
     await this.assertVestedBalance(investor, 1 * 0.2 * 3770);
   });
 
@@ -544,11 +615,11 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.tokenSale.setWhitelistedAmount.sendTransaction(investor, web3.toWei(1, 'ether'));
 
     await this.invest(investor, 1.0, {setWhitelist: false, shouldFail: false});
-    await this.assertTokenBalance(investor, 1 * 3770);
+    await this.assertLiquidableTokenBalance(investor, 1 * 3770);
     await this.assertVestedBalance(investor, 1 * 0.2 * 3770);
 
     await this.invest(investor, 1.0, {setWhitelist: false, shouldFail: true});
-    await this.assertTokenBalance(investor, 1 * 3770);
+    await this.assertLiquidableTokenBalance(investor, 1 * 3770);
     await this.assertVestedBalance(investor, 1 * 0.2 * 3770);
   });
 
@@ -564,6 +635,9 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 15);
 
+    await this.fastForwardToAfterCrowdsaleEnd(duration.hours(1));
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000})
+
     await this.token.transfer.sendTransaction(investor2, 100 * 10 ** 18, {from: investor1})
     await this.assertTokenBalance(investor2, 100)
   });
@@ -575,12 +649,12 @@ contract('CUZTeamTokenVesting', function(accounts) {
 
     await this.fastForwardToAfterPresaleStart(duration.hours(12));
     await this.invest(investor1, 1000);
-    await this.assertTokenBalance(investor1, 1000 * 3770);
+    await this.assertLiquidableTokenBalance(investor1, 1000 * 3770);
     await this.assertVestedBalance(investor1, 1000 * 3770 * 0.5);
 
     await this.fastForwardToAfterCrowdsaleStart(duration.hours(1));
     await this.invest(investor2, 2000);
-    await this.assertTokenBalance(investor2, 2000 * 3770);
+    await this.assertLiquidableTokenBalance(investor2, 2000 * 3770);
     await this.assertVestedBalance(investor2, 2000 * 3770 * 0.2);
 
     const tokensLeft = (await this.token.cap()).sub(await this.token.totalSupply());
@@ -588,7 +662,8 @@ contract('CUZTeamTokenVesting', function(accounts) {
     const crowdTokens = tokensLeft.sub(companyTokens);
 
     await this.fastForwardToAfterCrowdsaleEnd(duration.days(1));
-    await this.tokenSale.releaseUnsoldTokens.sendTransaction();
+    await this.tokenLiquidizer.liquidateAllFunds.sendTransaction({gas: 4000000});
+    await this.tokenSale.releaseUnsoldTokens.sendTransaction({gas: 4000000});
 
     await this.assertTokenBalance(accounts[0], oldOwnerBalance.add(companyTokens.div(1e18)).add(crowdTokens.div(1e18).div(4)));
     await this.assertTokenBalance(investor1, (new BigNumber(1000 * 3770)).add((crowdTokens.div(4)).div(1e18)));
@@ -696,7 +771,7 @@ contract('CUZTeamTokenVesting', function(accounts) {
     await this.invest(investor, 1000, {setWhitelist: false, shouldFail: true});
 
     await this.invest(investor, 1000);
-    await this.assertTokenBalance(investor, crazySaleRate.mul(1000));
+    await this.assertLiquidableTokenBalance(investor, crazySaleRate.mul(1000));
     await this.assertVestedBalance(investor, 0);
 
     await increaseTimeTo(crazySaleStartTime.add(duration.hours(25)));
