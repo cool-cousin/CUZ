@@ -482,16 +482,10 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
 
     bool higherThanMinimum = msg.value >= 0.1 * 10 ** 18;  // the minimum contribution is 0.1eth
 
-    // for the first three hours of the presale there in a max contribution of 3 eth
-    bool lowerThanMaximum = (!isPreSale()
-      || now >= presaleStartTime.add(3600 * 3)
-      || msg.value.add(contributionsInWei[msg.sender]) <= 3 * 10 ** 18  // take into account any previous contributions
-    );
-
     // make sure we have not passed the eth contribution cap
     bool withinCap = weiRaised.add(msg.value) <= cap;
 
-    return withinCap && higherThanMinimum && lowerThanMaximum;
+    return withinCap && higherThanMinimum;
   }
 
   function setWhitelistPermission(address address_, bool allow) onlyOwner public {
