@@ -382,6 +382,8 @@ contract CUZTokenSale is CappedCrowdsale, Ownable {
   }
 
   function buyTokens(address beneficiary) public payable {
+    require(beneficiary != address(0));
+    
     uint256 tokenAmount = getTokenAmount(msg.value);
     tokenLiquidizer.addLiquidableAmount(beneficiary, tokenAmount);
 
